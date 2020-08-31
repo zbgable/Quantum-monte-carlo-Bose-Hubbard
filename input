@@ -1,0 +1,17 @@
+0       r_cnf_stat
+4      Lx
+1      t
+10       U
+-4.0       mu
+1.0     beta
+0.25    p_delw
+0.25    p_ts
+0.25    p_crek
+0.25    p_delk
+500     Ntoss
+100000   Nsamp
+50      N_print
+500     N_write
+3000  N_each
+1       N_measure
+1234    Seed
