@@ -2,7 +2,7 @@
   !*******************************************************************
   !
 
-  !  codes for  Bose-Hubbard model.
+  !  codes for transverse Bose-Hubbard model.
 
   !  Author    : Ke-Hang Zhu
   !  Date      : July 16th, 2020
@@ -169,14 +169,12 @@
     integer(8)                      :: flg_used            !pointer for the used index and unused index
     integer(8)           ,allocatable:: supergrid(:)      !pointer for the used index and unused index
     integer(8)                      :: N_beta=1000000            !time slicing of imaginary axis
-    integer(8)                      :: grid_N=5             !number of grid line
-    integer(8)                      :: grid_dis             !distance between two grid
-    real(8)                         :: omega_G=1.0/40000           !weight between G and Z space
+    real(8)                         :: omega_G=1.0/40000          !weight between G and Z space
     real(8)                         :: h_change            !diaginal part of the Hamiltonian
     real(8)                         :: N_kink ,n_k            !kink number
     real(8)                         :: nboson
 
-    integer(8)                      :: multiple=200            !n time of Vol segments will be created
+    integer(8)                      :: multiple=20           !n time of Vol segments will be created
     real(8)                         :: p_delw,p_ts,p_crek,p_delk ! probabilty for calling the updates
 
     !-----------------------------------------------------------------
@@ -186,7 +184,7 @@
 
   !======================== START MAIN PROGRAM ======================
   
-  PROGRAM Ising
+  PROGRAM BH
     use my_vrbls
     implicit none
     integer :: isamp,r_cnf_stat,i_each,N_each,iblck
@@ -375,11 +373,11 @@ CONTAINS
     !-- Test and Print -----------------------------------------------
 
     write(6,*)
-    write(6,*) "Ising model"
+    write(6,*) "Bose Hubbard model"
     write(6,40) Lx,Ly
     40 format('on ',i4,1x,"*",1x,i4,2x,'Square lattice')
     write(6,*)
-    write(6,*) "H=-t*\sum_{<i,j>}\sigma_i\sigma_j-h\sum_i\sigma_i"
+    write(6,*) "H=-t*\sum_{<i,j>}b^+j bi+c.c.+U/2*sum_in_i(n_i-1)-mu*sum_i n_i"
     write(6,41) t,U,mu,beta
     41 format(',where t=',f12.8,' U=',f12.8,' mu=',f12.8,' beta=',f12.8)
     write(6,*)
@@ -410,7 +408,7 @@ CONTAINS
 
     supergrid=0
     index=0
-print*,index
+!print*,index
     call set_segs
 
 
@@ -512,7 +510,6 @@ print*,index
         stop "D should be 1 or 2"
     end if
 
-    grid_dis=N_beta/grid_N
     delmu=mu+U/2
     return
   END SUBROUTINE
@@ -561,9 +558,9 @@ print*,index
     nnb1=nnb+1; nnb2=nnb/2
 !    print*,j,nnsite(j,:)
 
-do ii=1, Vol
-print*, nnsite(ii,:)
-end do
+!do ii=1, Vol
+!print*, nnsite(ii,:)
+!end do
 
     return
   END SUBROUTINE def_latt
@@ -649,7 +646,7 @@ END FUNCTION
     do istep= 1, N_measure
         
         call Quaworm
-        !call check                 !check the program
+       ! call check                 !check the program
 
     enddo
     return
@@ -674,23 +671,24 @@ END FUNCTION
               !   print*,'==========================','delete ira-masha succeeded','=========================='
             !end if
         else if (pt<p_delw+p_ts) then
-          !  print*,'==========================','time shift update','=========================='
+           ! print*,'==========================','time shift update','=========================='
 
             Call Time_shift
 
         else if (pt<p_delw+p_ts+p_crek) then
-            ! print*,'==========================','create kink update','=========================='
+            !print*,'==========================','create kink update','=========================='
 
             Call Cre_kink
+
         else if (pt<p_delw+p_ts+p_crek+p_delk) then
-            ! print*,'==========================','delete kink update','=========================='
+             !print*,'==========================','delete kink update','=========================='
 
             Call Del_kink
         end if
 
     else    !if the configuration is in the Z space
 
-         !print*,'==========================','create ira-masha update','=========================='
+        ! print*,'==========================','create ira-masha update','=========================='
         Call Create_IM
 
     end if
@@ -702,15 +700,15 @@ END FUNCTION
     SUBROUTINE Create_IM           ! module for creating ira-masha pair
     implicit none
     integer(8) :: I,ind
-    integer(8) :: nul
+    integer(8) :: nul=0 ! transfer fro Integer 4 to Interger 8
     integer(8) :: t_ira,t_masha,tt1,tt2
     integer(8) :: tm1,tm2,len
     integer(8) :: I_index, M_index,Subse
     integer(8) :: leng1,leng2,leng0
     integer(8) :: old_occ_num
     real(8) :: P_crew
+    logical  :: is_loop
 
-    nul=0  ! transfer fro Integer 4 to Interger 8
     I=dint(rn()*flg_used)+1                !randomly select one segment
     ind=index(I)
     Subse=seg(ind)%sub_index
@@ -719,8 +717,9 @@ END FUNCTION
     len=seg(ind)%length
     tm2=seg(ind)%begin+len
     old_occ_num=seg(ind)%n_b
+    is_loop=(len==N_beta)
 
-    if (len/=N_beta) then                !if the segment is not a loop
+    if (.not. is_loop) then                !if the segment is not a loop
             t_ira=dint(rn()*(len-1))+1+tm1  !select two time points
             t_masha=dint(rn()*(len-1))+1+tm1
             tt1=imatime_periodic(t_ira)      !satisfy the periodic boundary condition
@@ -732,11 +731,11 @@ END FUNCTION
             M_index=index(masha)
 
             if (t_ira>t_masha) then             !--masha======ira-
-                P_crew=1!p_crew_noloop(t_ira,t_masha,old_occ_num,1,tm1,tm2)
-
+                P_crew=p_crew_noloop(t_ira,t_masha,old_occ_num,1,tm1,tm2)
                 leng1=tm2-t_ira
                 leng2=t_ira-t_masha
                 leng0=t_masha-tm1
+                if(leng0==0 .or.leng1==0 .or.leng2==0 ) return
 
                 if (rn()<P_crew) then
 
@@ -753,16 +752,14 @@ END FUNCTION
                 end if
 
             else if (t_ira<t_masha) then        !===ira-----masha==
-                P_crew=1!p_crew_noloop(t_ira,t_masha,old_occ_num,-1,tm1,tm2)
-
+                if (old_occ_num==0) return   ! if the occupation number <0,reject
+                P_crew=p_crew_noloop(t_ira,t_masha,old_occ_num,-1,tm1,tm2)
                 leng2=tm2-t_masha
                 leng1=t_masha-t_ira
                 leng0=t_ira-tm1
+                if(leng0==0 .or.leng1==0 .or.leng2==0) return
 
                 if (rn()<P_crew) then
-
-                        if (seg(ind)%n_b==0) return   ! if the occupation number <0,reject
-
                         Call cre_seg(seg(ind)%site,tt2,leng2,old_occ_num,I_index,seg(ind)%sub_index,nul,masha,M_index)
                         Call cre_seg(seg(ind)%site,tt1,leng1,old_occ_num-1,ind,M_index,nul,ira,I_index)
                         seg(ind)%length=leng0       !update the original segment
@@ -786,70 +783,58 @@ END FUNCTION
         I_index=index(ira)
         M_index=index(masha)
         if (t_ira>t_masha) then
-
+            leng0=t_ira-t_masha
            if (rn()<1.0/2) then      ! choose at random counterclockwise or clockwise
-                P_crew=1!p_crew_loop(t_ira-t_masha,old_occ_num,1)
-
+                P_crew=p_crew_loop(leng0,old_occ_num,1)
                 if (rn()<P_crew) then
 
-                    Call cre_seg(seg(ind)%site,t_masha,t_ira-t_masha,old_occ_num+1,I_index,I_index,nul,masha,M_index)
-                    Call cre_seg(seg(ind)%site,t_ira,N_beta-seg(M_index)%length,old_occ_num,M_index,M_index,nul,ira,I_index)
+                    Call cre_seg(seg(ind)%site,t_masha,leng0,old_occ_num+1,I_index,I_index,nul,masha,M_index)
+                    Call cre_seg(seg(ind)%site,t_ira,N_beta-leng0,old_occ_num,M_index,M_index,nul,ira,I_index)
+                    
                     flg_used=flg_used+1 !set the pointer
-if (seg(index(flg_used+1))%length/=0)then
-    print*, "flag error when creating ira"
-    print*, seg(index(flg_used+1))
-    print*, seg(I_index)
-    print*, seg(ind)
-    I=index(10000000)
-end if
+
                     Call update_energy_occupa_num(old_occ_num,1,seg(M_index)%length)
                     GT_ZF=.true.
                 end if
             else                    ! choose at random counterclockwise or clockwise
-                if (old_occ_num>0)then
-                    P_crew=p_crew_loop(t_masha+N_beta-t_ira,old_occ_num,-1)
+                if (old_occ_num==0) return
+                    P_crew=p_crew_loop(N_beta-leng0,old_occ_num,-1)
                     if (rn()<P_crew) then
 
-                        Call cre_seg(seg(ind)%site,t_masha,t_ira-t_masha,old_occ_num,I_index,I_index,nul,masha,M_index)
-                        Call cre_seg(seg(ind)%site,t_ira,N_beta-seg(M_index)%length,old_occ_num-1,M_index,M_index,nul,ira,I_index)
+                        Call cre_seg(seg(ind)%site,t_masha,leng0,old_occ_num,I_index,I_index,nul,masha,M_index)
+                        Call cre_seg(seg(ind)%site,t_ira,N_beta-leng0,old_occ_num-1,M_index,M_index,nul,ira,I_index)
                         flg_used=flg_used+1 !set the pointer
                         Call update_energy_occupa_num(old_occ_num,-1,seg(I_index)%length)
                         GT_ZF=.true.
                     end if
-                end if
 
             end if
 
         else if (t_ira<t_masha) then
-
+            leng0=t_masha-t_ira
             if (rn()<1.0/2) then      ! choose at random counterclockwise or clockwise
-                P_crew=1!p_crew_loop(N_beta-t_masha+t_ira,old_occ_num,1)
+                P_crew=p_crew_loop(N_beta-leng0,old_occ_num,1)
               
                 if (rn()<P_crew) then
-
-                    Call cre_seg(seg(ind)%site,t_masha,N_beta-t_masha+t_ira,old_occ_num+1,I_index,I_index,nul,masha,M_index)
-                    Call cre_seg(seg(ind)%site,t_ira,t_masha-t_ira,old_occ_num,M_index,M_index,nul,ira,I_index)
+                    Call cre_seg(seg(ind)%site,t_masha,N_beta-leng0,old_occ_num+1,I_index,I_index,nul,masha,M_index)
+                    Call cre_seg(seg(ind)%site,t_ira,leng0,old_occ_num,M_index,M_index,nul,ira,I_index)
                     flg_used=flg_used+1 !set the pointer
                     Call update_energy_occupa_num(old_occ_num,1,seg(M_index)%length)
                     GT_ZF=.true.
                 end if
             else                    ! choose at random counterclockwise or clockwise
                 if (old_occ_num==0) return
-                    P_crew=p_crew_loop(t_masha-t_ira,old_occ_num,-1)
-                    if (rn()<P_crew) then
+                    P_crew=p_crew_loop(leng0,old_occ_num,-1)
+                if (rn()<P_crew) then
 
-                        Call cre_seg(seg(ind)%site,t_masha,N_beta-t_masha+t_ira,old_occ_num,I_index,I_index,nul,masha,M_index)
-                        Call cre_seg(seg(ind)%site,t_ira,t_masha-t_ira,old_occ_num-1,M_index,M_index,nul,ira,I_index)
-                        flg_used=flg_used+1 !set the pointer
-                        Call update_energy_occupa_num(old_occ_num,-1,seg(I_index)%length)
-                        GT_ZF=.true.
-                    end if
-
+                    Call cre_seg(seg(ind)%site,t_masha,N_beta-leng0,old_occ_num,I_index,I_index,nul,masha,M_index)
+                    Call cre_seg(seg(ind)%site,t_ira,leng0,old_occ_num-1,M_index,M_index,nul,ira,I_index)
+                    flg_used=flg_used+1 !set the pointer
+                    Call update_energy_occupa_num(old_occ_num,-1,seg(I_index)%length)
+                    GT_ZF=.true.
+                end if
             end if
         end if
-!print*,'P_crew'
-!print*,P_crew
-
    ! if (GT_ZF)then
       !  print*,'create done'
   !  end if
@@ -860,7 +845,7 @@ end if
  SUBROUTINE Del_IM               ! module for deleting ira-masha pair
    implicit none
    integer(8) :: I,ind
-   integer(8) :: nul
+   integer(8) :: nul=0
    integer(8) :: t1,t2
    integer(8) :: tm1,tm2,len,leng_tot
    integer(8) :: I_index, M_index,Prior,Subse
@@ -868,7 +853,6 @@ end if
    real(8) :: P_delw_acc
    integer(8) :: old_occ_num
 
-        nul=0
         I_index=index(ira)
         M_index=index(masha)
         tira=seg(I_index)%begin
@@ -876,11 +860,10 @@ end if
     
     if (seg(I_index)%sub_index==M_index .and. seg(I_index)%pri_index==M_index) then ! if Ira and masha are the only two segments composing the world line
         if (rn()<1.0/2) then     ! choose with equal prob to be n-1
-            P_delw_acc=1!p_delw_loop(seg(I_index)%length,seg(I_index)%n_b,seg(M_index)%n_b)
+            P_delw_acc=p_delw_loop(seg(M_index)%length,seg(M_index)%n_b,-1)
 
             if (rn()<P_delw_acc) then
                 ! create a loop sgement
-
                 ind=index(flg_used+1)
                 flg_used=flg_used+1
                 Call cre_seg(seg(I_index)%site,nul,N_beta,seg(I_index)%n_b,ind,ind,nul,flg_used,ind)
@@ -894,13 +877,12 @@ end if
             end if
 
          else           ! choose with equal prob to be n
-           P_delw_acc=1!p_delw_loop(seg(I_index)%length,seg(I_index)%n_b+1,seg(M_index)%n_b)
+           P_delw_acc=p_delw_loop(seg(I_index)%length,seg(I_index)%n_b,1)
             if (rn()<P_delw_acc) then
                 ! create a loop sgement
                 ind=index(flg_used+1)
                 flg_used=flg_used+1
                 Call cre_seg(seg(I_index)%site,nul,N_beta,seg(I_index)%n_b+1,ind,ind,nul,flg_used,ind)
-
                 Call update_energy_occupa_num(seg(I_index)%n_b,1,seg(I_index)%length)
 
                 Call delete_seg(ira)   !delete a segment ira
@@ -917,14 +899,13 @@ end if
             leng_tot=seg(Prior)%length+seg(I_index)%length+seg(M_index)%length
 
             tira=get_starting_point(I_index)  !in case ira move through the beta
-            P_delw_acc=1!p_delw_noloop(leng_tot,tira,tmasha,seg(Prior)%n_b)
+            P_delw_acc=p_delw_noloop(leng_tot,seg(I_index)%length,old_occ_num,+1)
 
             if (rn()<P_delw_acc) then
                 seg(Prior)%length=leng_tot     ! update the Prior segment
                 seg(Prior)%sub_index=Subse
                 seg(Subse)%pri_index=Prior
                 Call griding(Prior)  !supergrid
-
                 Call update_energy_occupa_num(old_occ_num,1,seg(I_index)%length)
 
                 Call delete_seg(ira)   !delete a segment ira
@@ -938,14 +919,13 @@ end if
             leng_tot=seg(Prior)%length+seg(I_index)%length+seg(M_index)%length
 
             tmasha=get_starting_point(M_index)  !in case masha move through the beta
-            P_delw_acc=1!p_delw_noloop(leng_tot,tira,tmasha,seg(Prior)%n_b)
+            P_delw_acc=p_delw_noloop(leng_tot,seg(M_index)%length,old_occ_num,-1)
 
             if (rn()<P_delw_acc) then
                 seg(Prior)%length=leng_tot   ! update the Prior segment
                 seg(Prior)%sub_index=Subse
                 seg(Subse)%pri_index=Prior
                 Call griding(Prior)  !supergrid
-
                 Call update_energy_occupa_num(old_occ_num,-1,seg(M_index)%length)
 
                 Call delete_seg(ira)   !delete a segment ira
@@ -958,10 +938,9 @@ if (.not. GT_ZF) then
     ira=0
     masha=0
 end if
-
-    
    return
  END SUBROUTINE
+
 !====================================================================================================================
 SUBROUTINE Time_shift               ! module for time shift ira
   implicit none
@@ -984,10 +963,8 @@ SUBROUTINE Time_shift               ! module for time shift ira
     length_prior=t1
     length_cur=len-t1
     t1=t1+tmin
-!print*, seg(I_index)
-!print*, seg(Prior)
-!print*, t1
-    P_tshift=1!prob_ts(tira,t1,seg(prior)%n_b)
+
+    P_tshift=prob_ts(old_occ_num,1,t1-tira)
 
     if (rn()<P_tshift) then !accept or not
         Call move_begin_end(I_index,Prior,t1,length_cur,length_prior)
@@ -997,149 +974,37 @@ SUBROUTINE Time_shift               ! module for time shift ira
   return
 END SUBROUTINE
 !====================================================================================================================
-
 SUBROUTINE Cre_kink              ! module for creating a kink
   implicit none
   integer(8) :: dir,t_kink
-  integer(8) :: nul=0
-  integer(8) :: site_ira,nnira,t_ira,t_adja
-  integer(8) :: tmin,tmax,len, length_new, length_ira, length_adja,old_occ_adja
+  integer(8) :: site_ira,nn_of_ira,t_ira
+  integer(8) :: tmin,tmax,len,old_occ_adja
   integer(8) :: I_index,Prior,adja
-  integer(8) :: I_new, index_ira,index_new,ii
-  integer(8) :: nt_kink
-  real(8) :: P_crekink,ori,check_ind
+  real(8) :: P_crekink=0,ori,check_ind
   logical  :: backward,is_loop
-    
-    ori=n_k
-    P_crekink=0
+    !print*,'maxtime &mintime error'
     I_index=index(ira)
-    site_ira=seg(I_index)%site      ! site of ira locates
     t_ira=seg(I_index)%begin     ! time of ira
     Prior=seg(I_index)%pri_index
 
-    dir=dint(nnb*rn())+1        ! randomly choose one of the n.n. sites of ira
-    nnira=nnsite(site_ira,dir)
-    adja=adjacent(t_ira,nnira,I_index)
+    site_ira=seg(I_index)%site                  ! site of ira locates
+    nn_of_ira=get_nearest_neighbor(site_ira)    ! randomly choose one of the n.n. sites of ira
+    adja=adjacent(t_ira,nn_of_ira,I_index)      !find the adjacent segment of ira
     old_occ_adja=seg(adja)%n_b
 
     is_loop=(seg(adja)%length==N_beta)
-    backward=rn()<1.0/2  ! determine with equal prob to shift ira backwards or forward
+    backward=(rn()<1.0/2)  ! determine with equal prob to shift ira backwards or forward
         ! ira is not the begin or the end of the adjacent segment
     if (t_ira==seg(adja)%begin .or. (t_ira==imatime_periodic(seg(adja)%begin+seg(adja)%length))) return
-    
     if (backward) then      ! determine with equal prob to shift ira backwards
               !==========----adja-----        ---kink===new===---Ira---
               !===Prior======Ira---------     ===kink----------------
-
-        if (is_loop) then
-            tmin=get_starting_point(Prior)
-            tmax=t_ira
-            len=tmax-tmin
-            t_kink=dint(rn()*(len-1))+1          !pick up a point betwen tmax and tmin
-            t_kink=t_kink+tmin
-
-            length_new=t_ira-t_kink
-            length_ira=N_beta-length_new
-        else
-            if (seg(adja)%begin<=t_ira .and. seg(adja)%begin+seg(adja)%length>=t_ira) then
-                t_adja=seg(adja)%begin
-            else if (seg(adja)%begin>t_ira) then
-                t_adja=seg(adja)%begin-N_beta
-            end if
-            tmin=MAX(get_starting_point(Prior),t_adja)
-            !tmin=MAX(get_starting_point(Prior),get_starting_point(adja))
-            tmax=t_ira
-            len=tmax-tmin
-            t_kink=dint(rn()*(len-1))+1
-            t_kink=t_kink+tmin
-
-            length_new=t_ira-t_kink
-            length_adja=t_kink-t_adja
-            length_ira=seg(adja)%length+t_adja-t_ira
-
-
-        end if
-
-        if (len<=1) return
-        P_crekink=1!p_crek_acc(tmin,tmax,t_kink,seg(Prior)%n_b,seg(adja)%n_b+1,backward,old_occ_adja)
-            if (rn()<P_crekink) then  !accept or not
-
-                ira=flg_used+1      !update of ira
-                I_new=flg_used+2    ! apply for new segment
-                index_ira=index(ira)
-                index_new=index(I_new)
-                flg_used=flg_used+2
-
-                !note t1 may be negative
-                nt_kink=imatime_periodic(t_kink)
-                
-                !create two new segments
-                Call cre_seg(seg(adja)%site,t_ira,length_ira,seg(adja)%n_b,index_new,seg(adja)%sub_index,nul,ira,index_ira)
-                Call cre_seg(seg(adja)%site,nt_kink,length_new,seg(adja)%n_b+1,adja,index_ira,I_index,I_new,index_new)
-                Call updata_create_kink(backward,Prior,I_index,adja,index_ira,index_new,is_loop)
-
-                n_k=n_k+1
-                Call update_energy_occupa_num(seg(Prior)%n_b,-1,seg(index_new)%length)
-                Call update_energy_occupa_num(old_occ_adja,1,seg(index_new)%length)
-            end if
-       
-        
+         Call suggest_to_create_kink_backward(I_index,Prior,adja,is_loop)
     else                   ! determine with equal prob to shift ira forward
         if (seg(adja)%n_b==0) return ! need to make sure that adja segment has occupation number >0, or ira would destroy it
                                     !=======adja==========     =adja=====Ira----kink====New====
                                     !===Prior======Ira------    ====Prior=======kink----------
-
-            if (is_loop) then
-                tmax=t_ira+seg(I_index)%length
-                tmin=t_ira
-                len=tmax-tmin
-                t_kink=dint(rn()*(len-1))+1
-                t_kink=t_kink+tmin
-
-                length_ira=t_kink-t_ira
-                length_new=N_beta-length_ira
-            else
-                tmin=t_ira
-                if (seg(adja)%begin<=t_ira .and. seg(adja)%begin+seg(adja)%length>=t_ira) then
-                    t_adja=seg(adja)%begin
-                else if (seg(adja)%begin>t_ira) then
-                    t_adja=seg(adja)%begin-N_beta
-                end if
-                tmax=MIN(t_adja+seg(adja)%length,seg(I_index)%begin+seg(I_index)%length)
-                len=tmax-tmin
-                !print*, len,'!!!!!!!tamx-tmin'
-                t_kink=dint(rn()*(len-1))+1
-                t_kink=t_kink+tmin
-
-                length_ira=t_kink-t_ira
-                length_adja=get_length_back(t_ira,seg(adja)%begin)
-                length_new=seg(adja)%length-length_ira-length_adja
-
-            end if
-
-        if (len<=1) return
-            P_crekink=1!p_crek_acc(tmin,tmax,t_kink,seg(Prior)%n_b,seg(adja)%n_b,backward,old_occ_adja)
-            if (rn()<P_crekink) then            !accecp or not
-                
-                ira=flg_used+1      !update of ira
-                I_new=flg_used+2
-                flg_used=flg_used+2
-                index_ira=index(ira)
-                index_new=index(I_new)
-
-                !note t1 may be larger than N_beta
-                nt_kink=imatime_periodic(t_kink)
-
-                !create two new segments
-                Call cre_seg(seg(adja)%site,t_ira,length_ira,seg(adja)%n_b-1,adja,index_new,nul,ira,index_ira)
-                Call cre_seg(seg(adja)%site,nt_kink,length_new,seg(adja)%n_b,index_ira,seg(adja)%sub_index,I_index,I_new,index_new)
-
-                Call updata_create_kink(backward,Prior,I_index,adja,index_ira,index_new,is_loop)
-
-                n_k=n_k+1
-                Call update_energy_occupa_num(seg(Prior)%n_b-1,1,seg(index_ira)%length)
-                Call update_energy_occupa_num(old_occ_adja,-1,seg(index_ira)%length)
-            end if
+         Call suggest_to_create_kink_forward(I_index,Prior,adja,is_loop)
     end if
   return
 END SUBROUTINE
@@ -1160,39 +1025,39 @@ SUBROUTINE Del_kink              ! module for deleting a kink
 
     Prior=seg(I_index)%pri_index
     Subse=seg(I_index)%sub_index
-    !if (seg(Prior)%n_b==seg(Subse)%n_b) then !only then can we delete a kink
 
-        is_loop=(Prior==Subse)  !judge wgether this is a loop after deletion
-        backward=rn()<1.0/2  ! determine with equal prob to shift ira backwards or forward
+    is_loop=(Prior==Subse)  !judge wgether this is a loop after deletion
+    backward=rn()<1.0/2  ! determine with equal prob to shift ira backwards or forward
 
-        if (backward) then      ! determine with equal prob to shift ira backwards
-            
+    if (backward) then      ! determine with equal prob to shift ira backwards
             Pre_pri=seg(Prior)%pri_index               !-----Pre_pri----==Prior==.ira.---
-            Connec=seg(Prior)%kink_index             !===pre_connce===---Connec---------
+            Connec=seg(Prior)%kink_index               !===pre_connce===---Connec---------
            if (seg(Pre_pri)%n_b/=seg(I_index)%n_b) return
            if (Connec==0) return    ! take care of the special case where there is no kink on prior segment(masha)
            if (seg(Prior)%length>=seg(Connec)%length) return
                 Pre_connec=seg(Connec)%pri_index
-                adja=adjacent(tira,seg(Connec)%site,I_index)
-                if (Connec/=adja) return
-                   
-                    !====================calculate the acceptance ratio================
-                    !tm2=get_starting_point(Pre_connec)
-                    !tm1=get_starting_point(Pre_pri)
-                    !tmin=MAX(tm1,tm2)
-                    tmin=get_tmin(Connec,Pre_connec,I_index,Prior)
-                    tmax=tira
-                    t_kink=get_tkink(I_index,Prior,backward)
-
-                    P_delkink=1!p_delk_acc(tmin,tmax,t_kink,seg(Pre_connec)%n_b,seg(Prior)%n_b,backward,I_index,Pre_connec)
-                    !============================================================================
-                    if (rn()<P_delkink) then
-                        n_k=n_k-1
-                        Call update_energy_occupa_num(seg(Prior)%n_b,-1,seg(Prior)%length)
-                        Call update_energy_occupa_num(seg(Connec)%n_b,1,seg(Prior)%length)
-                        Call update_del_kink(backward,Connec,Pre_pri,Pre_connec,Prior,I_index,is_loop)
-                        ira=seg(Connec)%selfp           !update the ira segment
-                    end if
+            !====================calculate the acceptance ratio================
+            tmin=get_tmin(Connec,Pre_connec,I_index,Prior)
+            tmax=tira
+            t_kink=get_tkink(I_index,Prior,backward)
+if (tmin>=tmax) then
+    print*,'maxtime &mintime error',tmin,tmax
+    check_ii=index(100000000)
+end if
+if (seg(Prior)%n_b==0) then
+    print*,'occ error in prior seg'
+    print*,seg(Prior)
+    print*,seg(I_index)
+    check_ii=index(100000000)
+end if
+            P_delkink=p_delk_acc(tmin,tmax,t_kink,seg(Pre_connec)%n_b,seg(Prior)%n_b,backward,I_index,Pre_connec)
+            if (rn()<P_delkink) then
+                n_k=n_k-1
+                Call update_energy_occupa_num(seg(Prior)%n_b,-1,seg(Prior)%length)
+                Call update_energy_occupa_num(seg(Connec)%n_b,1,seg(Prior)%length)
+                Call update_del_kink(backward,Connec,Pre_pri,Pre_connec,Prior,I_index,is_loop)
+                ira=seg(Connec)%selfp           !update the ira segment
+            end if
         else                  ! determine with equal prob to shift ira forward
             if (seg(Prior)%n_b/=seg(Subse)%n_b) return !only then can we delete a kink
             Connec=seg(Subse)%kink_index            !===Prior===.ira.----===Subse===
@@ -1205,34 +1070,21 @@ SUBROUTINE Del_kink              ! module for deleting a kink
                 if (Pre_connec/=adja) return
                 
                 !==========================!calculate the acceptance ratio
-                    !tmax=MIN(seg(Connec)%begin+seg(Connec)%length,seg(Subse)%begin+seg(Subse)%length)
                     tmax=get_tmax(Pre_Connec,Connec,I_index,Subse)
                     tmin=tira
-
+if (tmin>=tmax) then
+    print*,'maxtime &mintime error',tmin,tmax
+    check_ii=index(100000000)
+end if
                     t_kink=get_tkink(I_index,Subse,backward)
-                    P_delkink=1!p_delk_acc(tmin,tmax,t_kink,seg(Pre_connec)%n_b,seg(Prior)%n_b,backward,I_index,Pre_connec)
-                !============================================================================
-                    if (rn()<P_delkink) then
-                        n_k=n_k-1  !measurement
-                        Call update_energy_occupa_num(seg(I_index)%n_b,1,seg(I_index)%length)
-                        Call update_energy_occupa_num(seg(Pre_Connec)%n_b,-1,seg(I_index)%length)
-                        !print*,'Connec segment'
-                       ! print*,seg(Connec)
-                       ! print*,'PRE_connec segment'
-                        !print*,seg(Pre_connec)
-                       ! print*,'Prior segment'
-                       ! print*,seg(Prior)
-                       !! print*,'I_index segment'
-                       ! print*,seg(I_index)
-                       ! print*,'Subse segment'
-                       ! print*,seg(Subse)
-                       ! print*,'--------------------=================----------------'
-
-                        Call update_del_kink(backward,Connec,Prior,Pre_connec,Subse,I_index,is_loop)
-                        ira=seg(Connec)%selfp           !update the ira segment
-                          ! print*,'ira after the update'
-                          !print*,seg(ira)
-                    end if
+                    P_delkink= p_delk_acc(tmin,tmax,t_kink,seg(Pre_connec)%n_b,seg(Prior)%n_b,backward,I_index,Pre_connec)
+                if (rn()<P_delkink) then
+                    n_k=n_k-1  !measurement
+                    Call update_energy_occupa_num(seg(I_index)%n_b,1,seg(I_index)%length)
+                    Call update_energy_occupa_num(seg(Pre_Connec)%n_b,-1,seg(I_index)%length)
+                    Call update_del_kink(backward,Connec,Prior,Pre_connec,Subse,I_index,is_loop)
+                    ira=seg(Connec)%selfp           !update the ira segment
+                end if
         end if
 
   return
@@ -1287,7 +1139,6 @@ FUNCTION get_tkink(I_index,kink_index,backward)
             
   return
 END FUNCTION
-
 !=====================================================================================================================
 FUNCTION imatime_periodic(tt)              ! module for getting with periodic boundary condition
   implicit none
@@ -1359,12 +1210,10 @@ FUNCTION p_crew_noloop(t_ira,t_masha,old_occ_num,num_change,tm1,tm2)           !
   integer    :: num_change
   real(8) ::R,W_r,p_crew_noloop
   real(8) ::deltat,delta_h0
-  real(8) ::max_min,leng1,leng2
+  real(8) ::max_min,leng1,inter_to_real
 
-
-    leng2=(tm2-tm1)*1.0
-    max_min=beta*leng2/N_beta
-
+    inter_to_real=(tm2-tm1)*1.0
+    max_min=beta*inter_to_real/N_beta
     delta_h0=delta_E(old_occ_num,num_change)
 
     if (t_masha>t_ira) then
@@ -1389,10 +1238,11 @@ FUNCTION p_crew_loop(leng_IM,old_occ_num,num_change)           ! module for dele
   integer(8) ::leng_IM,old_occ_num
   integer :: num_change
   real(8) ::R,W_r,p_crew_loop
-  real(8) ::deltat,delta_h0,leng1
+  real(8) ::deltat,inter_to_real
+   real(8)   ::delta_h0
 
-    leng1=leng_IM*1.0
-    deltat=beta*leng1/N_beta
+    inter_to_real=leng_IM*1.0
+    deltat=beta*inter_to_real/N_beta
     delta_h0=delta_E(old_occ_num,num_change)
 
     if (num_change<0) then
@@ -1408,69 +1258,66 @@ FUNCTION p_crew_loop(leng_IM,old_occ_num,num_change)           ! module for dele
   return
 END FUNCTION
 !=====================================================================================================================
-FUNCTION p_delw_loop(l1,n1,n_m)           ! module for deleting a segment
+FUNCTION p_delw_loop(leng_IM,old_occ_num,num_change)
   implicit none
-  integer(8) ::l1,n1,n_m
-  real(8) ::R,W_r,p_delw_loop,leng1
-  real(8) ::deltat
-  integer(8) :: N_fl
+  integer(8) ::leng_IM,old_occ_num,N_fl
+  integer :: num_change
+  real(8) ::R,W_r,p_delw_loop,inter_to_real
+  real(8) ::deltat,delta_h0
 
-     leng1=l1*1.0
-
-    if (n1==n_m) then
-        deltat=beta*leng1/N_beta
-        W_r=1.0/n_m*dexp(-deltat*(U/2*(2*n_m-1)-delmu))
+    inter_to_real=leng_IM*1.0
+    deltat=beta*leng_IM*1.0/N_beta
+     delta_h0=delta_E(old_occ_num,num_change)
+    if (num_change>0) then
+        W_r=1.0/(old_occ_num+1)*dexp(-deltat*delta_h0)
         !W_r=1.0*dexp(-deltat*(U/2*(2*n_m-1)-delmu))
-    else if (n1<n_m) then
-        deltat=beta*(1.0-leng1/N_beta)
-        W_r=1.0/n_m*dexp(-deltat*(U/2*(-2*n_m+1)+delmu))
+    else
+        W_r=1.0/old_occ_num*dexp(-deltat*delta_h0)
         !W_r=1.0*dexp(-deltat*(U/2*(-2*n_m+1)+delmu))
     end if
-
     N_fl=flg_used-1
-    
     R=W_r/beta/beta/N_fl/p_delw/omega_G*2
     p_delw_loop=MIN(1.0,R)
   return
 END FUNCTION
-!=====================================================================================================================
-FUNCTION p_delw_noloop(l1,ti,tm,n)          ! module for deleting a segment
+
+FUNCTION p_delw_noloop(leng_tot,leng_IM,old_occ_num,num_change)       ! module for deleting a segment
   implicit none
-  integer(8) :: l1,ti,tm,n,N_fl
+  integer(8) ::leng_IM,old_occ_num,N_fl,leng_tot
+  integer :: num_change
   real(8) ::R,W_r,p_delw_noloop
   real(8) ::deltat,leng1
-  real(8) ::max_min
+  real(8) ::max_min, delta_h0
 
-    max_min=beta*(l1-1.0)/N_beta
-
-    if (ti<tm) then
-        leng1=(tm-ti)*1.0
-        deltat=beta*leng1/N_beta
-        W_r=1.0/n*dexp(-deltat*(U/2*(2*n+1.0)-delmu))
-        !W_r=1.0*dexp(-deltat*(U/2*(2*n+1.0)-delmu))
+    max_min=beta*(leng_tot-1.0)/N_beta
+    deltat=beta*leng_IM*1.0/N_beta
+     delta_h0=delta_E(old_occ_num,num_change)
+    if (num_change>0) then
+        W_r=1.0/(old_occ_num+1)*dexp(-deltat*delta_h0)
+        !W_r=1.0*dexp(-deltat*(U/2*(2*n_m-1)-delmu))
     else
-        leng1=(ti-tm)*1.0
-        deltat=beta*leng1/N_beta
-        W_r=1.0/(n+1)*dexp(-deltat*(U/2.0*(-2*n+1.0)+delmu))
-        !W_r=1.0*dexp(-deltat*(U/2.0*(-2*n+1.0)+delmu))
+        W_r=1.0/old_occ_num*dexp(-deltat*delta_h0)
+        !W_r=1.0*dexp(-deltat*(U/2*(-2*n_m+1)+delmu))
     end if
 
     N_fl=flg_used-2
-
     R=W_r/max_min/max_min/N_fl/p_delw/omega_G*2
     p_delw_noloop=MIN(1.0,R)
   return
 END FUNCTION
+
 !=====================================================================================================================
-FUNCTION prob_ts(tau1,tau2,n)           ! module for deleting a segment
+FUNCTION prob_ts(old_occ_num,num_change,move_length)          ! module for deleting a segment
   implicit none
-  integer(8) :: tau1,tau2,n
+  integer(8) :: move_length,old_occ_num
+  integer :: num_change
   real(8) ::R,prob_ts
-  real(8) ::deltat,leng1
-    leng1=(tau2-tau1)*1.0
+  real(8) ::deltat,leng1,delta_h0
+    leng1=move_length*1.0
     deltat=beta*leng1/N_beta
 
-    R=dexp(-deltat*(U/2.0*(2*n-1)-delmu))
+    delta_h0=delta_E(old_occ_num,num_change)
+    R=dexp(-deltat*(delta_h0))
     prob_ts=MIN(1.0,R)
   return
 END FUNCTION
@@ -1488,7 +1335,6 @@ FUNCTION p_crek_acc(tm1,tm2,tau1,n1,n2,backward,old_occ_adja)           ! module
     
     if (backward)then
         inter_to_real=1.0*(tm2-tau1)
-
         deltat=beta*inter_to_real/N_beta
 
         deltaE1=delta_E(n1,-1)
@@ -1532,7 +1378,6 @@ if (n2<0) then
     print*,'occ error'
     check_ii=index(100000000)
 end if
-
 
     if (backward)then
         inter_to_real=1.0*(tm2-tau1)
@@ -1591,7 +1436,7 @@ SUBROUTINE cre_seg(s,l1,l2,n,i1,i2,i3,p,inx)              ! module for deleting 
     Call griding(cur)
   return
 END SUBROUTINE
-!=====================================================================================================================
+
 SUBROUTINE delete_seg(pointee)              ! module for deleting a segment
   implicit none
   integer(8) :: pointee,err
@@ -1601,7 +1446,7 @@ SUBROUTINE delete_seg(pointee)              ! module for deleting a segment
     index(pointee)=index(flg_used)
         if (index(flg_used)==0)then
             print*,'index error'
-
+print*,seg
             err=index(100000000)
         end if
         if (temporary==0)then
@@ -1622,14 +1467,10 @@ SUBROUTINE delete_seg(pointee)              ! module for deleting a segment
     flg_used=flg_used-1
 
     Call null_seg(temporary)
-    !print*,'======================='
-    !print*, index
-    !print*,'======================='
   return
 END SUBROUTINE
 
-!=====================================================================================================================
-SUBROUTINE null_seg(inx)              ! module for deleting a segment
+SUBROUTINE null_seg(inx)
   implicit none
   integer(8) :: cur,inx
     cur=inx
@@ -1646,80 +1487,202 @@ SUBROUTINE null_seg(inx)              ! module for deleting a segment
 END SUBROUTINE
 
 !=====================================================================================================================
-SUBROUTINE updata_create_kink(backward,Prior,I_index,adja,index_ira,index_new,is_loop)              ! module for deleting a segment
+FUNCTION get_nearest_neighbor(site1)               ! module for time shift ira
   implicit none
-  logical :: backward
-  integer(8) :: Prior,I_index,adja,index_ira,index_new,sub_adja,ii
-  logical :: is_loop
-    
-    seg(I_index)%begin=seg(index_new)%begin
-    seg(I_index)%kink_index=index_new
+    integer(8) :: dir,get_nearest_neighbor,site1
 
-    if (backward) then
-        
-        seg(Prior)%length=seg(Prior)%length-seg(index_new)%length       !update of the prior
-        seg(I_index)%length=seg(I_index)%length+seg(index_new)%length   !update of the segment where i originally located
+        dir=dint(nnb*rn())+1        ! randomly choose one of the n.n. sites of ira
+        get_nearest_neighbor=nnsite(site1,dir)
+  return
+END FUNCTION
 
+SUBROUTINE suggest_to_create_kink_backward(I_index,Prior,adja,is_loop)
+implicit none
+ integer(8) :: t_adja,nt_kink,t_kink,t_ira
+ integer(8) :: tmin,tmax,len, length_new, length_ira, length_adja,old_occ_adja
+ integer(8) :: I_index,Prior,adja
+ integer(8) :: I_new, index_ira,index_new
+ integer(8) :: nul=0
+ real(8) :: P_crekink=0
+ logical  :: is_loop,backward=.true.
+
+    t_ira=seg(I_index)%begin
+    old_occ_adja=seg(adja)%n_b
+     if (is_loop) then
+         tmin=get_starting_point(Prior)
+         tmax=t_ira
+         len=tmax-tmin
+         t_kink=dint(rn()*(len-1))+1          !pick up a point betwen tmax and tmin
+         t_kink=t_kink+tmin
+
+         length_new=t_ira-t_kink
+         length_ira=N_beta-length_new
+     else
+         if (seg(adja)%begin<=t_ira .and. seg(adja)%begin+seg(adja)%length>=t_ira) then
+             t_adja=seg(adja)%begin
+         else if (seg(adja)%begin>t_ira) then
+             t_adja=seg(adja)%begin-N_beta
+         end if
+         tmin=MAX(get_starting_point(Prior),t_adja)
+         tmax=t_ira
+         len=tmax-tmin
+         t_kink=dint(rn()*(len-1))+1
+         t_kink=t_kink+tmin
+
+         length_new=t_ira-t_kink
+         length_adja=t_kink-t_adja
+         length_ira=seg(adja)%length+t_adja-t_ira
+     end if
+
+     if (len<=1) return
+     P_crekink=p_crek_acc(tmin,tmax,t_kink,seg(Prior)%n_b,seg(adja)%n_b+1,backward,old_occ_adja)
+         if (rn()<P_crekink) then  !accept or not
+             ira=flg_used+1      !update of ira
+             I_new=flg_used+2    ! apply for new segment
+             index_ira=index(ira)
+             index_new=index(I_new)
+             flg_used=flg_used+2
+
+             nt_kink=imatime_periodic(t_kink)  !note t1 may be negative
+             Call update_old_world_line(I_index,Prior,nt_kink,index_new,length_new,backward)
+            Call update_nnsite_world_line(adja,t_ira,length_ira,length_new,t_kink,I_index,index_ira,&
+            & index_new,I_new,is_loop,backward)
+
+             n_k=n_k+1
+             Call update_energy_occupa_num(seg(Prior)%n_b,-1,seg(index_new)%length)
+             Call update_energy_occupa_num(old_occ_adja,1,seg(index_new)%length)
+         end if
+  return
+END SUBROUTINE
+
+SUBROUTINE suggest_to_create_kink_forward(I_index,Prior,adja,is_loop)
+implicit none
+  integer(8) :: I_index,Prior,adja
+  integer(8) :: t_ira,t_adja,nt_kink,t_kink
+  integer(8) :: tmin,tmax,len, length_new, length_ira, length_adja,old_occ_adja
+  integer(8) :: I_new, index_ira,index_new,ii
+  integer(8) :: nul=0
+  real(8) :: P_crekink=0
+  logical  :: is_loop,backward=.false.
+
+        t_ira=seg(I_index)%begin
+        old_occ_adja=seg(adja)%n_b
         if (is_loop) then
-            !seg(index_ira)%length=N_beta-seg(index_new)%length
-            seg(index_ira)%sub_index=index_new
-            seg(index_new)%pri_index=index_ira
-            Call delete_seg(seg(adja)%selfp)
+            tmax=t_ira+seg(I_index)%length
+            tmin=t_ira
+            len=tmax-tmin
+            t_kink=dint(rn()*(len-1))+1
+            t_kink=t_kink+tmin
+
+            length_ira=t_kink-t_ira
+            length_new=N_beta-length_ira
         else
-            !update of the adjacent segment
-            sub_adja=seg(adja)%sub_index
-            seg(sub_adja)%pri_index=index_ira
-            seg(adja)%length=seg(adja)%length-seg(index_new)%length-seg(index_ira)%length
-            seg(adja)%sub_index=index_new
-
-            !print*,'!!!!!!!!seg(index_new)%length',seg(index_new)%length
-           ! print*,'!!!!!!!!seg(index_ira)%length',seg(index_ira)%length
-
-            if (seg(index_new)%length<0 .or. seg(index_new)%length>N_beta) then
-                print*,'---------------------------'
-                print*,'length error in updata_create_kink'
-                print*,'---------------------------'
-                 ii=index(10000000)
+            tmin=t_ira
+            if (seg(adja)%begin<=t_ira .and. seg(adja)%begin+seg(adja)%length>=t_ira) then
+                t_adja=seg(adja)%begin
+            else if (seg(adja)%begin>t_ira) then
+                t_adja=seg(adja)%begin-N_beta
             end if
-            if (seg(index_ira)%length<0 .or. seg(index_ira)%length>N_beta) then
-                print*,'---------------------------'
-                print*,'length error in updata_create_kink'
-                print*,seg
-                print*,'---------------------------'
-                 ii=index(10000000)
-            end if
+            tmax=MIN(t_adja+seg(adja)%length,seg(I_index)%begin+seg(I_index)%length)
+            len=tmax-tmin
 
+            t_kink=dint(rn()*(len-1))+1
+            t_kink=t_kink+tmin
+            length_ira=t_kink-t_ira
+            length_adja=get_length_back(t_ira,seg(adja)%begin)
+            length_new=seg(adja)%length-length_ira-length_adja
         end if
 
+        if (len<=1) return
+        P_crekink=p_crek_acc(tmin,tmax,t_kink,seg(Prior)%n_b,seg(adja)%n_b,backward,old_occ_adja)
+        if (rn()<P_crekink) then            !accecp or not
+            
+            ira=flg_used+1      !update of ira
+            I_new=flg_used+2
+            flg_used=flg_used+2
+            index_ira=index(ira)
+            index_new=index(I_new)
+            nt_kink=imatime_periodic(t_kink)  !note t1 may be larger than N_beta
+
+            Call update_old_world_line(I_index,Prior,nt_kink,index_new,length_ira,backward)
+            Call update_nnsite_world_line(adja,t_ira,length_ira,length_new,t_kink,I_index,&
+                & index_ira,index_new,I_new,is_loop,backward)
+            n_k=n_k+1
+            Call update_energy_occupa_num(seg(Prior)%n_b-1,1,seg(index_ira)%length)
+            Call update_energy_occupa_num(old_occ_adja,-1,seg(index_ira)%length)
+        end if
+  return
+END SUBROUTINE
+
+SUBROUTINE update_old_world_line(segment1,segment2,time_to_move,ind_kink,length_mid,backward)
+    implicit none
+    integer(8) :: segment1,segment2,time_to_move,ind_kink,length1,length2,length_mid
+    logical :: backward
+
+        if (backward) then
+            length1=seg(segment1)%length+length_mid
+            length2=seg(segment2)%length-length_mid
+        else
+            length1=seg(segment1)%length-length_mid
+            length2=seg(segment2)%length+length_mid
+        end if
+
+        Call move_begin_end(segment1,segment2,time_to_move,length1,length2)
+        seg(segment1)%kink_index=ind_kink
+  return
+END SUBROUTINE
+
+SUBROUTINE update_nnsite_world_line(adja,t_ira,length_ira,length_new,t_kink,index_kink,index_ira,index_new,I_new,is_loop,backward)
+    implicit none
+    integer(8) :: adja,index_ira
+    integer(8) :: nul=0
+    integer(8) :: index_new,I_new
+    integer(8) :: t_ira,length_ira,length_new,t_kink,nt_kink,index_kink
+    logical :: is_loop,backward
+
+        nt_kink=imatime_periodic(t_kink)   !note t1 may be negative
+        
+    if (is_loop) then
+        if (backward) then
+            Call cre_seg(seg(adja)%site,t_ira,length_ira,seg(adja)%n_b,index_new,index_new,nul,ira,index_ira)
+            Call cre_seg(seg(adja)%site,nt_kink,length_new,seg(adja)%n_b+1,index_ira,index_ira,index_kink,I_new,index_new)
+            Call delete_seg(seg(adja)%selfp)
+        else
+            Call cre_seg(seg(adja)%site,t_ira,length_ira,seg(adja)%n_b-1,index_new,index_new,nul,ira,index_ira)
+            Call cre_seg(seg(adja)%site,nt_kink,length_new,seg(adja)%n_b,index_ira,index_ira,index_kink,I_new,index_new)
+            Call delete_seg(seg(adja)%selfp)
+        end if
     else
-
-        seg(I_index)%length=seg(I_index)%length-seg(index_ira)%length   !update of the segment where i originally located
-        seg(Prior)%length=seg(Prior)%length+seg(index_ira)%length       !update of the prior,only the length changes
-        
-        if (is_loop) then
-            !seg(index_new)%length=N_beta-seg(index_ira)%length
-            seg(index_new)%sub_index=index_ira
-            seg(index_ira)%pri_index=index_new
-            Call delete_seg(seg(adja)%selfp)
+        if (backward) then
+            Call cre_seg(seg(adja)%site,t_ira,length_ira,seg(adja)%n_b,index_new,seg(adja)%sub_index,nul,ira,index_ira)
+            Call cre_seg(seg(adja)%site,nt_kink,length_new,seg(adja)%n_b+1,adja,index_ira,index_kink,I_new,index_new)
+            Call cut_adjacent_into_three(adja,index_new,index_ira,backward)
         else
-            !update of the adjacent segment
-            sub_adja=seg(adja)%sub_index
-            seg(sub_adja)%pri_index=index_new
-            seg(adja)%length=seg(adja)%length-seg(index_new)%length-seg(index_ira)%length
-            seg(adja)%sub_index=index_ira
-
-           ! print*,'seg(index_new)%length',seg(index_new)%length
-            !print*,'seg(index_ira)%length',seg(index_ira)%length
-             !print*,seg
+            Call cre_seg(seg(adja)%site,t_ira,length_ira,seg(adja)%n_b-1,adja,index_new,nul,ira,index_ira)
+            Call cre_seg(seg(adja)%site,nt_kink,length_new,seg(adja)%n_b,index_ira,seg(adja)%sub_index,index_kink,I_new,index_new)
+            Call cut_adjacent_into_three(adja,index_new,index_ira,backward)
         end if
-
     end if
 
-    Call griding(Prior)     !supergrid
-    Call griding(I_index)
+  return
+END SUBROUTINE
+
+SUBROUTINE cut_adjacent_into_three(adja,index_new,index_ira,backward)
+    implicit none
+    integer(8) :: adja,index_new,index_ira,sub_adja
+    logical ::backward
+
+    seg(adja)%length=seg(adja)%length-seg(index_new)%length-seg(index_ira)%length  !update of the adjacent segment
+    sub_adja=seg(adja)%sub_index
+    if (backward) then
+         seg(adja)%sub_index=index_new
+         seg(sub_adja)%pri_index=index_ira
+    else
+         seg(adja)%sub_index=index_ira
+         seg(sub_adja)%pri_index=index_new
+    end if
+
     Call griding(adja)
-    Call griding(index_new)
-    Call griding(index_ira)
   return
 END SUBROUTINE
 
@@ -1835,25 +1798,8 @@ SUBROUTINE back_to_a_loop(I_index,Prior,nb)
         flg_used=flg_used+1
         Call cre_seg(seg(I_index)%site,nul,N_beta,nb,index_new,index_new,nul,pointer_new,index_new)
         Call griding(index_new)
-
-       ! print*, 'ira after creation'
-      !  print*, seg(index(ira))
-       ! print*,'-------------------------------------------'
-    
-        
         Call delete_seg(seg(I_index)%selfp)     !delete the segment connected by the kink
-
-       ! print*, 'ira after deleting Prior'
-       ! print*, seg(index(ira))
-       ! print*,'-------------------------------------------'
-
-
-         Call delete_seg(seg(Prior)%selfp)     !delete the segment connected by the kink
-
-       ! print*, 'ira after deleting I_index'
-       ! print*, seg(index(ira))
-       ! print*,'-------------------------------------------'
-    
+        Call delete_seg(seg(Prior)%selfp)     !delete the segment connected by the kink
   return
 END SUBROUTINE
 
@@ -1882,6 +1828,11 @@ FUNCTION adjacent(tira,nnira,I_index)             ! module for searching for adj
   logical :: flg_find=.false.
 
     ad_index=supergrid(nnira)
+
+!if (seg(ad_index)%site==0) then
+!print*,ad_index,tira
+   ! ii=index(1000000)
+!end if
 
     if (seg(ad_index)%begin==0) then
         ad_begin=0
@@ -2015,6 +1966,12 @@ end if
         leng=seg(ind)%length
         beginetime=seg(ind)%begin
 
+        if(seg(ind)%begin==N_beta)then
+            print*, "begin overflow"
+            print*,seg(ind)
+            ind_sub=index(10000000)
+        end if
+
         if(seg(ind)%n_b<0)then
             print*, "occupation number overflow"
             print*,seg(ind)
@@ -2086,6 +2043,7 @@ end if
                  print*, "kink index error"
                 print*,seg(ind)
                 print*,seg(index_kink)
+                print*,seg(seg(index_kink)%kink_index)
                  print*,'------------------------------------------------------------------------'
                 print*,seg
                 ind_sub=index(10000000)
@@ -2103,6 +2061,10 @@ end do
         ind_sub=index(10000000)
     end if
 
+
+    !print*,nboson
+    !print*,h_change
+    !print*,n_k
     print*, "check done"
     return
   end subroutine
@@ -2135,8 +2097,8 @@ end do
     Z=Z+1
     Obser(1)%vnr=nboson   !first observable would be the occu number
     Obser(2)%vnr=-n_k/beta+h_change
-    Obser(3)%vnr=+n_k*(n_k+1)/beta**2+h_change**2-2*n_k/beta*h_change
-    Obser(4)%vnr=0
+    Obser(3)%vnr=+n_k*(n_k-1)/beta**2+h_change**2-2*n_k/beta*h_change
+    Obser(4)%vnr=n_k
     Obser(5)%vnr=0
 
     if(prtflg) then          !flag for write2file
